@@ -1,16 +1,16 @@
 # Walakage
 
-Walakage is a macOS menu-bar utility for controlling whether the Mac may sleep during long-running work.
+Walakage is a macOS menu-bar utility for preventing a MacBook from sleeping when the user wants long-running work to continue, including while the lid is closed.
 
 ## Language
 
 **Awake Session**:
-A period where Walakage prevents system sleep until a stop condition happens.
+A period where Walakage prevents lid sleep until a stop condition happens.
 _Avoid_: Mode, wake state
 
 **Keep Awake**:
 The user-facing control for starting or ending an Awake Session.
-_Avoid_: Start session, enable mode
+_Avoid_: Start session, enable mode, normal keep awake
 
 **Keep Display Awake**:
 An Awake Session setting that also prevents the display from sleeping.
@@ -43,7 +43,3 @@ _Avoid_: Schedule, alarm
 **Session State**:
 Whether Walakage currently has an active Awake Session. The menu-bar icon is always a coffee icon and is dimmed when inactive.
 _Avoid_: Detailed mode, status level
-
-**Clamshell Pause**:
-A temporary suspension of sleep prevention while macOS handles closed-lid external-display behavior. The Awake Session remains active and the menu can show that Walakage is paused for clamshell.
-_Avoid_: Stale session, clamshell mode
