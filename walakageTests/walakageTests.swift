@@ -181,7 +181,7 @@ struct PmsetLidSleepPreventerTests {
     }
 }
 
-private final class FakeLidSleepPreventer: LidSleepPreventing {
+final class FakeLidSleepPreventer: LidSleepPreventing {
     var startCount = 0
     var stopCount = 0
     var keepDisplayAwakeRequests: [Bool] = []

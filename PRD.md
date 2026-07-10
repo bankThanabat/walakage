@@ -206,23 +206,23 @@ The MVP ships as a signed and notarized DMG outside the Mac App Store, with no h
   - Battery Protection Threshold clamps to 5% through 80%
   - custom timer clamps to 24 hours max
   - typed fields commit on blur or Enter, not every keystroke
-- Add focused tests for assertion behavior:
-  - system-awake assertion starts for normal `Keep Awake`
+- Add focused tests for sleep-prevention behavior:
+  - lid-sleep prevention starts for `Keep Awake`
   - display-awake assertion is added only when requested
-  - partial assertion failure releases created assertions and returns OFF
-  - quit releases active assertions
+  - partial display-assertion failure restores lid sleep and returns OFF
+  - quit restores lid sleep and releases active assertions
 - Add focused tests for transient message behavior:
   - stop/failure messages persist while the app stays open
   - messages clear on start, manual OFF, or setting changes
-  - pause messages clear when pause ends
-  - current pause overrides old stop/failure message while paused
+  - administrator-approval failure uses the specific shared message
+  - launch-at-login failure reverts to actual registration state
 - Add accessibility verification for the panel:
   - status item has `Walakage` label
   - interactive controls expose labels matching visible copy
   - shared message area is exposed as status text
   - countdown is accessible text and not auto-announced every minute
   - native keyboard navigation works before adding custom focus handling
-- There is no prior app test suite in the repo yet; the first implementation should create the smallest useful XCTest target alongside the app.
+- Keep one focused Swift Testing target alongside the app; avoid UI-test machinery unless native interaction testing finds a real gap.
 
 ## Out of Scope
 
@@ -248,7 +248,6 @@ The MVP ships as a signed and notarized DMG outside the Mac App Store, with no h
 - Sound effects
 - Quit confirmation
 - `Keep Awake` OFF confirmation
-- Administrator permissions
 - Mac App Store release for MVP
 - Installer package
 - Auto-start after installation

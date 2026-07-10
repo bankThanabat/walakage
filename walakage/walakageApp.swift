@@ -9,37 +9,27 @@ struct WalakageApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            Toggle("Keep Awake", isOn: Binding(
-                get: { session.isAwake },
-                set: { setKeepAwake($0) }
-            ))
-
-            Toggle("Keep Display Awake", isOn: Binding(
-                get: { session.keepDisplayAwake },
-                set: { session.setKeepDisplayAwake($0) }
-            ))
-
-            if let message = session.message {
-                Text(message)
-                    .foregroundStyle(.secondary)
-            }
-
-            Divider()
-
-            Button("Quit Walakage") {
+            PanelView(session: session, setKeepAwake: setKeepAwake) {
                 session.quit()
                 NSApp.terminate(nil)
             }
         } label: {
-            Image(systemName: "cup.and.saucer.fill")
+            Image("StatusIcon")
+                .renderingMode(.template)
                 .opacity(session.isAwake ? 1 : 0.35)
+                .accessibilityLabel("Walakage")
         }
-        .menuBarExtraStyle(.menu)
+        .menuBarExtraStyle(.window)
     }
 
     private func setKeepAwake(_ keepAwake: Bool) {
         guard keepAwake else {
             session.setKeepAwake(false)
+            return
+        }
+
+        guard !session.isStartBlocked else {
+            session.setKeepAwake(true)
             return
         }
 

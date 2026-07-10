@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title description">
+  <title id="title">Walakage app icon</title>
+  <desc id="description">A warm rounded-square icon with an outlined coffee cup, saucer, handle, and rising steam.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFE4B8"/>
+      <stop offset="0.52" stop-color="#F5B06D"/>
+      <stop offset="1" stop-color="#DC704E"/>
+    </linearGradient>
+    <linearGradient id="cup" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFDF7"/>
+      <stop offset="1" stop-color="#FFF1DC"/>
+    </linearGradient>
+    <clipPath id="tile">
+      <rect x="56" y="56" width="912" height="912" rx="220"/>
+    </clipPath>
+  </defs>
+
+  <rect x="56" y="56" width="912" height="912" rx="220" fill="url(#background)"/>
+  <g clip-path="url(#tile)" opacity="0.16" fill="#9E3F36">
+    <circle cx="132" cy="902" r="235"/>
+    <circle cx="916" cy="144" r="188"/>
+  </g>
+  <rect x="74" y="74" width="876" height="876" rx="202" fill="none" stroke="#FFFFFF" stroke-opacity="0.28" stroke-width="12"/>
+
+  <g fill="none" stroke="#442820" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M389 322C361 290 363 254 391 221" stroke-width="34"/>
+    <path d="M488 322C455 284 458 238 490 198" stroke-width="34"/>
+    <path d="M586 322C559 289 561 254 588 221" stroke-width="34"/>
+
+    <path d="M649 430H714C783 430 822 477 815 536C807 604 758 638 674 638H650" stroke-width="42"/>
+    <path d="M289 375H667V588C667 710 587 785 478 785C369 785 289 710 289 588Z" fill="url(#cup)" stroke-width="42"/>
+    <path d="M236 826C304 862 382 878 478 878C574 878 652 862 720 826" stroke-width="42"/>
+  </g>
+
+  <path d="M331 427H625" fill="none" stroke="#FFFFFF" stroke-linecap="round" stroke-opacity="0.7" stroke-width="13"/>
+</svg>
