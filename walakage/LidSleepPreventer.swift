@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import IOKit.pwr_mgt
 import Security
 
 enum LidSleepPreventionError: Error {
@@ -19,14 +20,14 @@ enum LidSleepPreventionError: Error {
 }
 
 protocol LidSleepPreventing: AnyObject {
-    func startPreventingLidSleep() throws
+    func startPreventingLidSleep(keepingDisplayAwake: Bool) throws
     func stopPreventingLidSleep() throws
 }
 
 // ponytail: Swift marks this unavailable; use the C symbol for the prototype,
 // replace with an SMAppService helper if this survives past local validation.
 @_silgen_name("AuthorizationExecuteWithPrivileges")
-private func AuthorizationExecuteWithPrivilegesShim(
+private nonisolated func AuthorizationExecuteWithPrivilegesShim(
     _ authorization: AuthorizationRef,
     _ pathToTool: UnsafePointer<CChar>,
     _ options: AuthorizationFlags,
@@ -35,36 +36,135 @@ private func AuthorizationExecuteWithPrivilegesShim(
 ) -> OSStatus
 
 final class PmsetLidSleepPreventer: LidSleepPreventing {
-    private let toolPath = "/usr/bin/pmset"
-    private var isEnabled = false
+    private nonisolated static let toolPath = "/usr/bin/pmset"
 
-    func startPreventingLidSleep() throws {
-        try runPrivilegedPmset("1")
+    private let runPmsetOverride: ((String) throws -> Void)?
+    private let authorize: () throws -> AuthorizationRef
+    private let executePmsetCommand: (String, AuthorizationRef) -> OSStatus
+    private let freeAuthorization: (AuthorizationRef) -> Void
+    private let createDisplayAssertion: () throws -> IOPMAssertionID
+    private let releaseDisplayAssertion: (IOPMAssertionID) -> IOReturn
+    private var authorization: AuthorizationRef?
+    private var isEnabled = false
+    private var displayAssertion: IOPMAssertionID = 0
+
+    convenience init() {
+        self.init(
+            authorize: Self.authorizePmset,
+            executePmset: Self.executePmset,
+            freeAuthorization: { AuthorizationFree($0, []) },
+            createDisplayAssertion: Self.createNoDisplaySleepAssertion,
+            releaseDisplayAssertion: IOPMAssertionRelease
+        )
+    }
+
+    init(
+        runPmset: @escaping (String) throws -> Void,
+        createDisplayAssertion: @escaping () throws -> IOPMAssertionID,
+        releaseDisplayAssertion: @escaping (IOPMAssertionID) -> IOReturn
+    ) {
+        self.runPmsetOverride = runPmset
+        self.authorize = { throw LidSleepPreventionError.commandFailed("test authorization unexpectedly used") }
+        self.executePmsetCommand = { _, _ in errAuthorizationSuccess }
+        self.freeAuthorization = { _ in }
+        self.createDisplayAssertion = createDisplayAssertion
+        self.releaseDisplayAssertion = releaseDisplayAssertion
+    }
+
+    init(
+        authorize: @escaping () throws -> AuthorizationRef,
+        executePmset: @escaping (String, AuthorizationRef) -> OSStatus,
+        freeAuthorization: @escaping (AuthorizationRef) -> Void,
+        createDisplayAssertion: @escaping () throws -> IOPMAssertionID,
+        releaseDisplayAssertion: @escaping (IOPMAssertionID) -> IOReturn
+    ) {
+        self.runPmsetOverride = nil
+        self.authorize = authorize
+        self.executePmsetCommand = executePmset
+        self.freeAuthorization = freeAuthorization
+        self.createDisplayAssertion = createDisplayAssertion
+        self.releaseDisplayAssertion = releaseDisplayAssertion
+    }
+
+    func startPreventingLidSleep(keepingDisplayAwake: Bool) throws {
+        try runPmset("1")
         isEnabled = true
+
+        guard keepingDisplayAwake else { return }
+
+        do {
+            displayAssertion = try createDisplayAssertion()
+        } catch {
+            try? stopPreventingLidSleep()
+            throw error
+        }
     }
 
     func stopPreventingLidSleep() throws {
+        var releaseError: Error?
+        if displayAssertion != 0 {
+            let assertion = displayAssertion
+            displayAssertion = 0
+            let status = releaseDisplayAssertion(assertion)
+            if status != kIOReturnSuccess {
+                releaseError = LidSleepPreventionError.commandFailed("display assertion release failed: \(status)")
+            }
+        }
+
         guard isEnabled else { return }
 
-        try runPrivilegedPmset("0")
+        try runPmset("0")
         isEnabled = false
+        if let releaseError {
+            throw releaseError
+        }
     }
 
     deinit {
         try? stopPreventingLidSleep()
+        if let authorization {
+            freeAuthorization(authorization)
+        }
     }
 
-    private func runPrivilegedPmset(_ disablesleepValue: String) throws {
-        let authorization = try authorizePmset()
-        defer { AuthorizationFree(authorization, []) }
+    private nonisolated static func createNoDisplaySleepAssertion() throws -> IOPMAssertionID {
+        var assertion = IOPMAssertionID(0)
+        let status = IOPMAssertionCreateWithName(
+            kIOPMAssertionTypeNoDisplaySleep as CFString,
+            IOPMAssertionLevel(kIOPMAssertionLevelOn),
+            "Walakage Keep Display Awake" as CFString,
+            &assertion
+        )
+        guard status == kIOReturnSuccess else {
+            throw LidSleepPreventionError.commandFailed("display assertion failed: \(status)")
+        }
 
-        let status = executePmset(disablesleepValue, authorization: authorization)
+        return assertion
+    }
+
+    private func runPmset(_ disablesleepValue: String) throws {
+        if let runPmsetOverride {
+            try runPmsetOverride(disablesleepValue)
+            return
+        }
+
+        let status = executePmsetCommand(disablesleepValue, try cachedAuthorization())
         guard status == errAuthorizationSuccess else {
             throw LidSleepPreventionError.commandFailed("pmset failed: \(status)")
         }
     }
 
-    private func authorizePmset() throws -> AuthorizationRef {
+    private func cachedAuthorization() throws -> AuthorizationRef {
+        if let authorization {
+            return authorization
+        }
+
+        let authorization = try authorize()
+        self.authorization = authorization
+        return authorization
+    }
+
+    private nonisolated static func authorizePmset() throws -> AuthorizationRef {
         var authorization: AuthorizationRef?
         let createStatus = AuthorizationCreate(nil, nil, [], &authorization)
         guard createStatus == errAuthorizationSuccess, let authorization else {
@@ -72,7 +172,7 @@ final class PmsetLidSleepPreventer: LidSleepPreventing {
         }
 
         let rightsStatus = kAuthorizationRightExecute.withCString { rightName in
-            toolPath.withCString { tool in
+            Self.toolPath.withCString { tool in
                 var right = AuthorizationItem(
                     name: rightName,
                     valueLength: strlen(tool),
@@ -99,8 +199,8 @@ final class PmsetLidSleepPreventer: LidSleepPreventing {
         return authorization
     }
 
-    private func executePmset(_ disablesleepValue: String, authorization: AuthorizationRef) -> OSStatus {
-        toolPath.withCString { tool in
+    private nonisolated static func executePmset(_ disablesleepValue: String, authorization: AuthorizationRef) -> OSStatus {
+        Self.toolPath.withCString { tool in
             var command = Array("disablesleep".utf8CString)
             var argument = Array(disablesleepValue.utf8CString)
             return command.withUnsafeMutableBufferPointer { commandBuffer in
