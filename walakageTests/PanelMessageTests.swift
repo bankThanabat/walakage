@@ -25,4 +25,20 @@ struct PanelMessageTests {
 
         #expect(session.message == nil)
     }
+
+    @Test func failurePersistsAcrossBackgroundPowerRefreshes() {
+        let preventer = FakeLidSleepPreventer()
+        preventer.shouldFailStart = true
+        let power = FakePowerMonitor(.init(
+            isBatteryMac: true,
+            supply: .external,
+            batteryPercentage: 80
+        ))
+        let session = AwakeSessionController(preventer: preventer, powerMonitor: power)
+        session.setKeepAwake(true)
+
+        power.sendChange()
+
+        #expect(session.message == "Unable to keep awake.")
+    }
 }
