@@ -1,3 +1,4 @@
+import AppKit
 import Testing
 @testable import walakage
 
@@ -105,6 +106,17 @@ struct AwakeSessionPowerTests {
         #expect(!session.isAwake)
         #expect(session.message == "Battery low.")
         #expect(preventer.stopCount == 1)
+    }
+
+    @Test func wakeNotificationTriggersAPowerRecheck() {
+        let notificationCenter = NotificationCenter()
+        let monitor = SystemPowerSourceMonitor(workspaceNotificationCenter: notificationCenter)
+        var recheckCount = 0
+        monitor.startMonitoring { recheckCount += 1 }
+
+        notificationCenter.post(name: NSWorkspace.didWakeNotification, object: nil)
+
+        #expect(recheckCount == 1)
     }
 }
 

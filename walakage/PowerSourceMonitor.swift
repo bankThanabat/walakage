@@ -22,9 +22,14 @@ protocol PowerMonitoring: AnyObject {
 
 @MainActor
 final class SystemPowerSourceMonitor: PowerMonitoring {
+    private let workspaceNotificationCenter: NotificationCenter
     private var handler: (() -> Void)?
     private var powerSourceRunLoopSource: CFRunLoopSource?
     private var wakeObserver: NSObjectProtocol?
+
+    init(workspaceNotificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter) {
+        self.workspaceNotificationCenter = workspaceNotificationCenter
+    }
 
     func currentState() -> PowerState {
         guard let info = IOPSCopyPowerSourcesInfo()?.takeRetainedValue() else {
@@ -73,7 +78,7 @@ final class SystemPowerSourceMonitor: PowerMonitoring {
         }
 
         if wakeObserver == nil {
-            wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            wakeObserver = workspaceNotificationCenter.addObserver(
                 forName: NSWorkspace.didWakeNotification,
                 object: nil,
                 queue: .main
@@ -90,7 +95,7 @@ final class SystemPowerSourceMonitor: PowerMonitoring {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), powerSourceRunLoopSource, .commonModes)
         }
         if let wakeObserver {
-            NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver)
+            workspaceNotificationCenter.removeObserver(wakeObserver)
         }
     }
 
