@@ -94,7 +94,7 @@ struct PanelView: View {
 
             Picker("Timer", selection: Binding(
                 get: { session.timerSelection },
-                set: session.setTimer
+                set: selectTimer
             )) {
                 ForEach(SessionTimerSelection.allCases) { choice in
                     Text(choice.title).tag(choice)
@@ -206,6 +206,19 @@ struct PanelView: View {
         customHoursText = String(custom.hours)
         customMinutesText = String(custom.minutes)
         customTimerDirty = false
+    }
+
+    private func selectTimer(_ selection: SessionTimerSelection) {
+        if selection == .custom {
+            if customTimerDirty {
+                commitCustomTimer()
+            } else {
+                session.setTimer(selection)
+            }
+        } else {
+            customTimerDirty = false
+            session.setTimer(selection)
+        }
     }
 
     private func commitBatteryThreshold() {
