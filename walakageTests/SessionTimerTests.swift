@@ -5,6 +5,7 @@ import Testing
 @MainActor
 struct SessionTimerTests {
     @Test func quickChoicesMapToExpectedDurations() {
+        #expect(SessionTimerSelection.quickChoices.map(\.title) == ["Off", "15m", "30m", "1h", "2h", "4h"])
         #expect(SessionTimer.duration(for: .off, customHours: 0, customMinutes: 0) == nil)
         #expect(SessionTimer.duration(for: .fifteenMinutes, customHours: 0, customMinutes: 0) == 900.0)
         #expect(SessionTimer.duration(for: .thirtyMinutes, customHours: 0, customMinutes: 0) == 1_800.0)

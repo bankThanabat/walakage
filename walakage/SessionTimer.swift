@@ -22,6 +22,15 @@ enum SessionTimerSelection: String, CaseIterable, Identifiable {
         case .custom: "Custom"
         }
     }
+
+    static let quickChoices: [Self] = [
+        .off,
+        .fifteenMinutes,
+        .thirtyMinutes,
+        .oneHour,
+        .twoHours,
+        .fourHours
+    ]
 }
 
 enum SessionTimer {

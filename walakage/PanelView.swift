@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct PanelView: View {
@@ -5,11 +6,9 @@ struct PanelView: View {
     let setKeepAwake: (Bool) -> Void
     let quit: () -> Void
 
-    @State private var customHoursText: String
-    @State private var customMinutesText: String
-    @State private var batteryThresholdText: String
-    @State private var customTimerDirty = false
-    @State private var batteryThresholdDirty = false
+    @State private var customHoursDraft: IntegerFieldDraft
+    @State private var customMinutesDraft: IntegerFieldDraft
+    @State private var batteryThresholdDraft: IntegerFieldDraft
     @State private var isPanelOpen = false
     @State private var lastFocusedField: Field?
     @FocusState private var focusedField: Field?
@@ -22,9 +21,9 @@ struct PanelView: View {
         self.session = session
         self.setKeepAwake = setKeepAwake
         self.quit = quit
-        _customHoursText = State(initialValue: String(session.customTimerHours))
-        _customMinutesText = State(initialValue: String(session.customTimerMinutes))
-        _batteryThresholdText = State(initialValue: String(session.batteryProtectionThreshold))
+        _customHoursDraft = State(initialValue: IntegerFieldDraft(value: session.customTimerHours))
+        _customMinutesDraft = State(initialValue: IntegerFieldDraft(value: session.customTimerMinutes))
+        _batteryThresholdDraft = State(initialValue: IntegerFieldDraft(value: session.batteryProtectionThreshold))
     }
 
     var body: some View {
@@ -92,28 +91,19 @@ struct PanelView: View {
             Text("Timer")
                 .font(.subheadline.weight(.medium))
 
-            Picker("Timer", selection: Binding(
-                get: { session.timerSelection },
-                set: selectTimer
-            )) {
-                ForEach(SessionTimerSelection.allCases) { choice in
-                    Text(choice.title).tag(choice)
-                }
-            }
-            .labelsHidden()
-            .pickerStyle(.segmented)
-            .accessibilityLabel("Timer")
+            TimerSegmentedControl(
+                selection: session.timerSelection,
+                onSelect: selectTimer
+            )
+            .frame(height: 24)
 
             HStack(spacing: 8) {
                 Text("Custom")
                     .foregroundStyle(.secondary)
 
                 TextField("Hours", text: Binding(
-                    get: { customHoursText },
-                    set: {
-                        customHoursText = $0
-                        customTimerDirty = true
-                    }
+                    get: { customHoursDraft.text },
+                    set: { customHoursDraft.edit($0) }
                 ))
                 .frame(width: 48)
                 .focused($focusedField, equals: .customHours)
@@ -124,11 +114,8 @@ struct PanelView: View {
                     .foregroundStyle(.secondary)
 
                 TextField("Minutes", text: Binding(
-                    get: { customMinutesText },
-                    set: {
-                        customMinutesText = $0
-                        customTimerDirty = true
-                    }
+                    get: { customMinutesDraft.text },
+                    set: { customMinutesDraft.edit($0) }
                 ))
                 .frame(width: 48)
                 .focused($focusedField, equals: .customMinutes)
@@ -165,11 +152,8 @@ struct PanelView: View {
                 Text("Battery Protection Threshold")
                 Spacer()
                 TextField("Percent", text: Binding(
-                    get: { batteryThresholdText },
-                    set: {
-                        batteryThresholdText = $0
-                        batteryThresholdDirty = true
-                    }
+                    get: { batteryThresholdDraft.text },
+                    set: { batteryThresholdDraft.edit($0) }
                 ))
                 .frame(width: 48)
                 .textFieldStyle(.roundedBorder)
@@ -198,48 +182,76 @@ struct PanelView: View {
     }
 
     private func commitCustomTimer() {
-        guard customTimerDirty else { return }
+        guard customHoursDraft.isDirty || customMinutesDraft.isDirty else { return }
         let custom = session.setCustomTimer(
-            hours: Int(customHoursText) ?? 0,
-            minutes: Int(customMinutesText) ?? 0
+            hours: customHoursDraft.parsedValue ?? 0,
+            minutes: customMinutesDraft.parsedValue ?? 0
         )
-        customHoursText = String(custom.hours)
-        customMinutesText = String(custom.minutes)
-        customTimerDirty = false
+        customHoursDraft.commit(custom.hours)
+        customMinutesDraft.commit(custom.minutes)
     }
 
     private func selectTimer(_ selection: SessionTimerSelection) {
-        if selection == .custom {
-            if customTimerDirty {
-                commitCustomTimer()
-            } else {
-                session.setTimer(selection)
-            }
-        } else {
-            customTimerDirty = false
-            session.setTimer(selection)
-        }
+        customHoursDraft.discardEdits()
+        customMinutesDraft.discardEdits()
+        session.setTimer(selection)
     }
 
     private func commitBatteryThreshold() {
-        guard batteryThresholdDirty else { return }
-        batteryThresholdText = String(session.setBatteryProtectionThreshold(
-            Int(batteryThresholdText) ?? 5
+        guard batteryThresholdDraft.isDirty else { return }
+        batteryThresholdDraft.commit(session.setBatteryProtectionThreshold(
+            batteryThresholdDraft.parsedValue ?? 5
         ))
-        batteryThresholdDirty = false
     }
 
     private func syncDrafts() {
-        customHoursText = String(session.customTimerHours)
-        customMinutesText = String(session.customTimerMinutes)
-        batteryThresholdText = String(session.batteryProtectionThreshold)
-        customTimerDirty = false
-        batteryThresholdDirty = false
+        customHoursDraft.commit(session.customTimerHours)
+        customMinutesDraft.commit(session.customTimerMinutes)
+        batteryThresholdDraft.commit(session.batteryProtectionThreshold)
     }
 
     private enum Field: Hashable {
         case customHours
         case customMinutes
         case batteryThreshold
+    }
+}
+
+private struct TimerSegmentedControl: NSViewRepresentable {
+    let selection: SessionTimerSelection
+    let onSelect: (SessionTimerSelection) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onSelect: onSelect)
+    }
+
+    func makeNSView(context: Context) -> NSSegmentedControl {
+        let control = NSSegmentedControl(
+            labels: SessionTimerSelection.quickChoices.map(\.title),
+            trackingMode: .selectOne,
+            target: context.coordinator,
+            action: #selector(Coordinator.didSelect(_:))
+        )
+        control.segmentStyle = .automatic
+        control.setAccessibilityLabel("Timer")
+        return control
+    }
+
+    func updateNSView(_ control: NSSegmentedControl, context: Context) {
+        context.coordinator.onSelect = onSelect
+        control.selectedSegment = SessionTimerSelection.quickChoices.firstIndex(of: selection) ?? -1
+    }
+
+    final class Coordinator: NSObject {
+        var onSelect: (SessionTimerSelection) -> Void
+
+        init(onSelect: @escaping (SessionTimerSelection) -> Void) {
+            self.onSelect = onSelect
+        }
+
+        @objc func didSelect(_ sender: NSSegmentedControl) {
+            guard SessionTimerSelection.quickChoices.indices.contains(sender.selectedSegment) else { return }
+            onSelect(SessionTimerSelection.quickChoices[sender.selectedSegment])
+        }
     }
 }

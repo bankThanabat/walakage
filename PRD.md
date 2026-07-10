@@ -123,7 +123,8 @@ The MVP ships as a signed and notarized DMG outside the Mac App Store, with no h
 - Apply `Launch at Login` changes immediately.
 - If login item changes fail, revert the toggle to actual registered state and show `Unable to launch at login.`
 - Store Session Defaults in `UserDefaults`.
-- Remember `Keep Display Awake`, timer duration/source, Battery Protection Threshold, and `Only While Charging`.
+- Remember timer duration/source, Battery Protection Threshold, and `Only While Charging`.
+- Keep `Keep Display Awake` session-local and default it to OFF on every launch.
 - Do not silently resume an Awake Session after app restart.
 - After quit and reopen, show inactive with saved settings and no old countdown.
 - Do not store run history or persist the last stop reason across restart.
