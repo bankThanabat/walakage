@@ -100,6 +100,7 @@ struct AwakeSessionPowerTests {
         session.setBatteryProtectionThreshold(5)
         session.setKeepAwake(true)
 
+        #expect(session.setBatteryProtectionThreshold(0) == 5)
         #expect(session.setBatteryProtectionThreshold(100) == 80)
 
         #expect(session.batteryProtectionThreshold == 80)
