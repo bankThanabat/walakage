@@ -13,7 +13,7 @@
 Run these checks from an installed, signed build:
 
 - [ ] The menu-bar item is announced as `Walakage` and uses the coffee template icon.
-- [ ] Controls appear in order: `Keep Awake`, timer, `Keep Display Awake`, Battery Mac controls, `Launch at Login`, `Quit Walakage`.
+- [ ] Controls appear in order: `Keep Awake`, timer, `Keep Display Awake`, Battery Mac controls, `Quit Walakage`.
 - [ ] VoiceOver reads visible control labels and the shared `Status` value.
 - [ ] Countdown text is readable but is not announced automatically each minute.
 - [ ] Tab moves through native controls and Space changes the focused toggle.
@@ -27,7 +27,6 @@ Run these checks from an installed, signed build:
 
 - [ ] Disconnecting power with `Only While Charging` enabled stops the run with `Power disconnected.`.
 - [ ] Discharging at or below the threshold stops the run with `Battery low.`.
-- [ ] Enabling and disabling `Launch at Login` from an installed signed app updates Login Items and never starts `Keep Awake`.
 - [ ] A Developer ID Application identity signs the Release app and DMG.
 - [ ] `notarytool` accepts the DMG, `stapler` validates it, and Gatekeeper assesses the app successfully.
 

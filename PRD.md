@@ -67,11 +67,6 @@ The MVP ships as a signed and notarized DMG outside the Mac App Store, with no h
 52. As a user, I want messages to clear when I start `Keep Awake`, turn it OFF, or change settings, so that old messages do not linger after acknowledgement.
 53. As a user, I want blocking messages to clear when the blocking condition is fixed, so that stale blockers disappear.
 54. As a user, I want stop/failure messages not to clear just because the panel closes or time passes, so that I can reopen the panel and see what happened.
-55. As a user, I want `Launch at Login`, so that Walakage can open automatically in the menu bar when I sign in.
-56. As a user, I want launch at login not to start `Keep Awake`, so that the app does not keep my Mac awake without explicit intent.
-57. As a user, I want `Launch at Login` changes to apply immediately, so that there is no separate Save button.
-58. As a user, I want `Unable to launch at login.` if login item registration fails, so that I know the setting did not apply.
-59. As a user, I want the login toggle to reflect actual registration state after failure, so that the UI is honest.
 60. As a user, I want Quit to release sleep prevention immediately, so that quitting stops Walakage completely.
 61. As a user, I want dismissing the panel to leave Walakage running, so that closing UI does not stop `Keep Awake`.
 62. As a user, I want Quit separated at the bottom, so that I do not hit it accidentally.
@@ -119,9 +114,6 @@ The MVP ships as a signed and notarized DMG outside the Mac App Store, with no h
 - Ignore restore failures in UI and log them during development.
 - Use native `Logger` from Apple's `os` framework.
 - Do not write custom log files and do not build a log viewer.
-- Use native macOS login item APIs for `Launch at Login`.
-- Apply `Launch at Login` changes immediately.
-- If login item changes fail, revert the toggle to actual registered state and show `Unable to launch at login.`
 - Store Session Defaults in `UserDefaults`.
 - Remember timer duration/source, Battery Protection Threshold, and `Only While Charging`.
 - Keep `Keep Display Awake` session-local and default it to OFF on every launch.
@@ -158,10 +150,9 @@ The MVP ships as a signed and notarized DMG outside the Mac App Store, with no h
 - Clear transient messages when the user starts `Keep Awake`, manually turns it OFF, or changes any setting.
 - Do not clear transient messages just because the panel closes or time passes.
 - Clear blocking messages when their blocking condition is no longer true.
-- Use these exact messages: `Time up.`, `Battery low.`, `Power disconnected.`, `Unable to keep awake.`, `Administrator approval failed.`, and `Unable to launch at login.`
+- Use these exact messages: `Time up.`, `Battery low.`, `Power disconnected.`, `Unable to keep awake.`, and `Administrator approval failed.`
 - Keep UI copy non-technical; do not show terms like `assertion`, `IOKit`, `pmset`, or `clamshell state`.
-- Use a compact vertical panel layout: primary toggle, timer controls, `Keep Display Awake`, battery controls, `Launch at Login`, then Quit.
-- Place `Launch at Login` near the bottom above Quit.
+- Use a compact vertical panel layout: primary toggle, timer controls, `Keep Display Awake`, battery controls, then Quit.
 - Place `Quit Walakage` at the bottom, separated from settings.
 - Style Quit as text-only, not as a red destructive button.
 - Use a static monochrome template menu-bar icon with opacity dimming for inactive state.
@@ -183,7 +174,7 @@ The MVP ships as a signed and notarized DMG outside the Mac App Store, with no h
 
 - Test external behavior at the highest practical seam: a small core decision model/controller that owns Awake Session state transitions, timer deadlines, stop-condition priority, lid-sleep prevention, and settings bounds.
 - Keep SwiftUI thin enough that most product behavior can be tested without UI automation.
-- Use tiny test seams only where needed for power state, timer/deadline behavior, lid-sleep prevention, login item registration, and display-awake assertions.
+- Use tiny test seams only where needed for power state, timer/deadline behavior, lid-sleep prevention, and display-awake assertions.
 - Avoid a broad abstraction layer; fake only the platform behaviors needed to test decisions.
 - Add focused unit tests for timer math:
   - quick durations map to correct deadlines
@@ -216,7 +207,6 @@ The MVP ships as a signed and notarized DMG outside the Mac App Store, with no h
   - stop/failure messages persist while the app stays open
   - messages clear on start, manual OFF, or setting changes
   - administrator-approval failure uses the specific shared message
-  - launch-at-login failure reverts to actual registration state
 - Add accessibility verification for the panel:
   - status item has `Walakage` label
   - interactive controls expose labels matching visible copy
@@ -249,6 +239,7 @@ The MVP ships as a signed and notarized DMG outside the Mac App Store, with no h
 - Sound effects
 - Quit confirmation
 - `Keep Awake` OFF confirmation
+- Launch at Login
 - Mac App Store release for MVP
 - Installer package
 - Auto-start after installation

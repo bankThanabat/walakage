@@ -9,8 +9,7 @@ struct PanelMessageTests {
             "Battery low.",
             "Power disconnected.",
             "Unable to keep awake.",
-            "Administrator approval failed.",
-            "Unable to launch at login."
+            "Administrator approval failed."
         ])
     }
 

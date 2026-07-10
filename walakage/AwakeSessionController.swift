@@ -15,14 +15,12 @@ final class AwakeSessionController: ObservableObject {
     @Published private(set) var batteryPercentage: Int?
     @Published private(set) var batteryProtectionThreshold = 20
     @Published private(set) var onlyWhileCharging = false
-    @Published private(set) var launchAtLogin: Bool
 
     private let preventer: LidSleepPreventing
     private let now: () -> Date
     private let scheduleDeadline: (Date, @escaping () -> Void) -> () -> Void
     private let powerMonitor: PowerMonitoring?
     private let userDefaults: UserDefaults?
-    private let launchAtLoginManager: LaunchAtLoginManaging?
     private var powerState: PowerState
     private var cancelDeadline: (() -> Void)?
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "walakage", category: "AwakeSession")
@@ -37,8 +35,7 @@ final class AwakeSessionController: ObservableObject {
             now: Date.init,
             scheduleDeadline: Self.schedule,
             powerMonitor: powerMonitor,
-            userDefaults: .standard,
-            launchAtLoginManager: SystemLaunchAtLoginManager()
+            userDefaults: .standard
         )
     }
 
@@ -47,8 +44,7 @@ final class AwakeSessionController: ObservableObject {
         now: @escaping () -> Date = Date.init,
         scheduleDeadline: @escaping (Date, @escaping () -> Void) -> () -> Void = { _, _ in {} },
         powerMonitor: PowerMonitoring? = nil,
-        userDefaults: UserDefaults? = nil,
-        launchAtLoginManager: LaunchAtLoginManaging? = nil
+        userDefaults: UserDefaults? = nil
     ) {
         let powerState = powerMonitor?.currentState()
             ?? PowerState(isBatteryMac: false, supply: .unknown, batteryPercentage: nil)
@@ -67,11 +63,9 @@ final class AwakeSessionController: ObservableObject {
         self.scheduleDeadline = scheduleDeadline
         self.powerMonitor = powerMonitor
         self.userDefaults = userDefaults
-        self.launchAtLoginManager = launchAtLoginManager
         self.powerState = powerState
         self.isBatteryMac = powerState.isBatteryMac
         self.batteryPercentage = powerState.batteryPercentage
-        self.launchAtLogin = launchAtLoginManager?.isEnabled ?? false
         self.timerSelection = timerSelection
         self.customTimerHours = custom.hours
         self.customTimerMinutes = custom.minutes
@@ -145,27 +139,6 @@ final class AwakeSessionController: ObservableObject {
         userDefaults?.set(onlyWhileCharging, forKey: DefaultsKey.onlyWhileCharging)
         panelMessage = nil
         applyProtectiveStopIfNeeded()
-    }
-
-    func setLaunchAtLogin(_ enabled: Bool) {
-        panelMessage = nil
-        guard let launchAtLoginManager else {
-            launchAtLogin = false
-            panelMessage = .unableToLaunchAtLogin
-            return
-        }
-
-        do {
-            try launchAtLoginManager.setEnabled(enabled)
-            launchAtLogin = launchAtLoginManager.isEnabled
-            guard launchAtLogin == enabled else {
-                throw LaunchAtLoginStateError.didNotChange
-            }
-        } catch {
-            launchAtLogin = launchAtLoginManager.isEnabled
-            panelMessage = .unableToLaunchAtLogin
-            logger.error("Unable to change launch at login: \(String(describing: error), privacy: .public)")
-        }
     }
 
     @discardableResult
@@ -310,8 +283,4 @@ private enum DefaultsKey {
     static let customTimerMinutes = "customTimerMinutes"
     static let batteryThreshold = "batteryProtectionThreshold"
     static let onlyWhileCharging = "onlyWhileCharging"
-}
-
-private enum LaunchAtLoginStateError: Error {
-    case didNotChange
 }

@@ -55,12 +55,6 @@ struct PanelView: View {
                 batteryControls
             }
 
-            Toggle("Launch at Login", isOn: Binding(
-                get: { session.launchAtLogin },
-                set: session.setLaunchAtLogin
-            ))
-            .accessibilityLabel("Launch at Login")
-
             Divider()
 
             Button("Quit Walakage", action: quit)
