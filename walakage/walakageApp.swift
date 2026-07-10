@@ -4,7 +4,7 @@ import SwiftUI
 @main
 struct WalakageApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @AppStorage("didConfirmLidSleepApproval") private var didConfirmLidSleepApproval = false
+    @State private var didConfirmLidSleepApproval = false
     @StateObject private var session = AwakeSessionController()
 
     var body: some Scene {
@@ -12,6 +12,11 @@ struct WalakageApp: App {
             Toggle("Keep Awake", isOn: Binding(
                 get: { session.isAwake },
                 set: { setKeepAwake($0) }
+            ))
+
+            Toggle("Keep Display Awake", isOn: Binding(
+                get: { session.keepDisplayAwake },
+                set: { session.setKeepDisplayAwake($0) }
             ))
 
             if let message = session.message {

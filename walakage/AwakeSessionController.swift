@@ -5,13 +5,14 @@ import OSLog
 @MainActor
 final class AwakeSessionController: ObservableObject {
     @Published private(set) var isAwake = false
+    @Published private(set) var keepDisplayAwake = false
     @Published private(set) var message: String?
 
     private let preventer: LidSleepPreventing
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "walakage", category: "AwakeSession")
 
-    init() {
-        self.preventer = PmsetLidSleepPreventer()
+    convenience init() {
+        self.init(preventer: PmsetLidSleepPreventer())
     }
 
     init(preventer: LidSleepPreventing) {
@@ -26,6 +27,23 @@ final class AwakeSessionController: ObservableObject {
         }
     }
 
+    func setKeepDisplayAwake(_ keepDisplayAwake: Bool) {
+        guard self.keepDisplayAwake != keepDisplayAwake else { return }
+
+        self.keepDisplayAwake = keepDisplayAwake
+        message = nil
+        guard isAwake else { return }
+
+        do {
+            try preventer.stopPreventingLidSleep()
+        } catch {
+            logger.error("Unable to restore lid sleep: \(String(describing: error), privacy: .public)")
+        }
+
+        isAwake = false
+        startAwakeSession()
+    }
+
     func quit() {
         stopAwakeSession()
     }
@@ -34,7 +52,7 @@ final class AwakeSessionController: ObservableObject {
         guard !isAwake else { return }
 
         do {
-            try preventer.startPreventingLidSleep()
+            try preventer.startPreventingLidSleep(keepingDisplayAwake: keepDisplayAwake)
             isAwake = true
             message = nil
         } catch {
