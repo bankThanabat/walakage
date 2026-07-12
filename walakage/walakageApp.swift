@@ -9,45 +9,41 @@ struct WalakageApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            Toggle("Keep Awake", isOn: Binding(
-                get: { session.isAwake },
-                set: { setKeepAwake($0) }
-            ))
-
-            Toggle("Keep Display Awake", isOn: Binding(
-                get: { session.keepDisplayAwake },
-                set: { session.setKeepDisplayAwake($0) }
-            ))
-
-            if let message = session.message {
-                Text(message)
-                    .foregroundStyle(.secondary)
-            }
-
-            Divider()
-
-            Button("Quit Walakage") {
-                session.quit()
-                NSApp.terminate(nil)
+            PanelView(session: session, setKeepAwake: setKeepAwake) {
+                Task {
+                    await session.quit()
+                    NSApp.terminate(nil)
+                }
             }
         } label: {
-            Image(systemName: "cup.and.saucer.fill")
+            Image("StatusIcon")
+                .renderingMode(.template)
                 .opacity(session.isAwake ? 1 : 0.35)
+                .accessibilityLabel("Walakage")
         }
-        .menuBarExtraStyle(.menu)
+        .menuBarExtraStyle(.window)
     }
 
     private func setKeepAwake(_ keepAwake: Bool) {
         guard keepAwake else {
-            session.setKeepAwake(false)
+            session.stopKeepingAwake()
+            return
+        }
+
+        guard !session.isStartBlocked else {
+            Task {
+                await session.startKeepingAwake()
+            }
             return
         }
 
         guard didConfirmLidSleepApproval || confirmLidSleepApproval() else { return }
 
-        session.setKeepAwake(true)
-        if session.isAwake {
-            didConfirmLidSleepApproval = true
+        Task {
+            await session.startKeepingAwake()
+            if session.isAwake {
+                didConfirmLidSleepApproval = true
+            }
         }
     }
 
