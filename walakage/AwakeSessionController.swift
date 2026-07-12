@@ -5,6 +5,7 @@ import OSLog
 @MainActor
 final class AwakeSessionController: ObservableObject {
     @Published private(set) var isAwake = false
+    @Published private(set) var isStarting = false
     @Published private(set) var keepDisplayAwake = false
     @Published private(set) var panelMessage: PanelMessage?
     @Published private(set) var timerSelection = SessionTimerSelection.off
@@ -16,13 +17,15 @@ final class AwakeSessionController: ObservableObject {
     @Published private(set) var batteryProtectionThreshold = 20
     @Published private(set) var onlyWhileCharging = false
 
-    private let preventer: LidSleepPreventing
+    private let preventionWorker: LidSleepPreventionWorker
     private let now: () -> Date
     private let scheduleDeadline: (Date, @escaping () -> Void) -> () -> Void
     private let powerMonitor: PowerMonitoring?
     private let userDefaults: UserDefaults?
     private var powerState: PowerState
     private var cancelDeadline: (() -> Void)?
+    private var pendingPreventionTask: Task<Void, Never>?
+    private var preventionOperation = 0
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "walakage", category: "AwakeSession")
 
     var message: String? { panelMessage?.rawValue }
@@ -58,7 +61,7 @@ final class AwakeSessionController: ObservableObject {
         if timerSelection == .custom, custom.hours == 0, custom.minutes == 0 {
             timerSelection = .off
         }
-        self.preventer = preventer
+        self.preventionWorker = LidSleepPreventionWorker(preventer: preventer)
         self.now = now
         self.scheduleDeadline = scheduleDeadline
         self.powerMonitor = powerMonitor
@@ -78,30 +81,36 @@ final class AwakeSessionController: ObservableObject {
         }
     }
 
-    func setKeepAwake(_ keepAwake: Bool) {
-        if keepAwake {
-            startAwakeSession()
-        } else {
-            stopAwakeSession()
-        }
+    func startKeepingAwake() async {
+        guard prepareToStartAwakeSession() else { return }
+        let operation = nextPreventionOperation()
+        isStarting = true
+        let result = await preventionWorker.start(keepingDisplayAwake: keepDisplayAwake)
+        guard operation == preventionOperation else { return }
+        isStarting = false
+        finishStartingAwakeSession(with: result)
     }
 
-    func setKeepDisplayAwake(_ keepDisplayAwake: Bool) {
-        guard self.keepDisplayAwake != keepDisplayAwake else { return }
+    func stopKeepingAwake() {
+        stopAwakeSession()
+    }
+
+    func setKeepDisplayAwake(_ keepDisplayAwake: Bool) async {
+        guard !isStarting, self.keepDisplayAwake != keepDisplayAwake else { return }
 
         self.keepDisplayAwake = keepDisplayAwake
         panelMessage = nil
         guard isAwake else { return }
 
-        do {
-            try preventer.stopPreventingLidSleep()
-        } catch {
-            logger.error("Unable to restore lid sleep: \(String(describing: error), privacy: .public)")
-        }
+        let operation = nextPreventionOperation()
+        let result = await preventionWorker.restart(keepingDisplayAwake: keepDisplayAwake)
+        guard operation == preventionOperation else { return }
 
-        do {
-            try preventer.startPreventingLidSleep(keepingDisplayAwake: keepDisplayAwake)
-        } catch {
+        logRestoreError(result.restoreError)
+        switch result.startResult {
+        case .success:
+            break
+        case .failure(let error):
             logger.error("Unable to keep awake: \(String(describing: error), privacy: .public)")
             isAwake = false
             cancelSessionTimer()
@@ -162,24 +171,40 @@ final class AwakeSessionController: ObservableObject {
         return SessionTimer.countdown(deadline: timerDeadline, now: date)
     }
 
-    func quit() {
-        stopAwakeSession()
+    func quit() async {
+        let operation = beginStoppingAwakeSession()
+        let error = await preventionWorker.stop()
+        guard operation == preventionOperation else { return }
+        logRestoreError(error)
     }
 
-    private func startAwakeSession() {
-        guard !isAwake else { return }
+    func waitForPendingPrevention() async {
+        await pendingPreventionTask?.value
+    }
+
+    private func prepareToStartAwakeSession() -> Bool {
+        guard !isAwake, !isStarting else { return false }
         panelMessage = nil
         if let protectiveStopMessage {
             panelMessage = protectiveStopMessage
-            return
+            return false
         }
+        return true
+    }
 
-        do {
-            try preventer.startPreventingLidSleep(keepingDisplayAwake: keepDisplayAwake)
+    private func finishStartingAwakeSession(
+        with result: Result<Void, LidSleepPreventionError>
+    ) {
+        switch result {
+        case .success:
             isAwake = true
             panelMessage = nil
+            if let protectiveStopMessage {
+                stopAwakeSession(message: protectiveStopMessage)
+                return
+            }
             restartSessionTimer()
-        } catch {
+        case .failure(let error):
             logger.error("Unable to keep awake: \(String(describing: error), privacy: .public)")
             isAwake = false
             panelMessage = message(for: error)
@@ -187,15 +212,32 @@ final class AwakeSessionController: ObservableObject {
     }
 
     private func stopAwakeSession(message: PanelMessage? = nil) {
-        do {
-            try preventer.stopPreventingLidSleep()
-        } catch {
-            logger.error("Unable to restore lid sleep: \(String(describing: error), privacy: .public)")
+        let operation = beginStoppingAwakeSession(message: message)
+        pendingPreventionTask = Task { [weak self] in
+            guard let self else { return }
+            let error = await preventionWorker.stop()
+            guard operation == preventionOperation else { return }
+            logRestoreError(error)
         }
+    }
 
+    private func beginStoppingAwakeSession(message: PanelMessage? = nil) -> Int {
+        let operation = nextPreventionOperation()
+        isStarting = false
         isAwake = false
         cancelSessionTimer()
         panelMessage = message
+        return operation
+    }
+
+    private func nextPreventionOperation() -> Int {
+        preventionOperation &+= 1
+        return preventionOperation
+    }
+
+    private func logRestoreError(_ error: LidSleepPreventionError?) {
+        guard let error else { return }
+        logger.error("Unable to restore lid sleep: \(String(describing: error), privacy: .public)")
     }
 
     private func restartSessionTimer() {

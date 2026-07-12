@@ -28,12 +28,12 @@ struct PanelView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Toggle("Keep Awake", isOn: Binding(
-                get: { session.isAwake },
+            toggleRow("Keep Awake", isOn: Binding(
+                get: { session.isAwake || session.isStarting },
                 set: setKeepAwake
             ))
             .font(.headline)
-            .accessibilityLabel("Keep Awake")
+            .disabled(session.isStarting)
 
             if let message = session.message {
                 Text(message)
@@ -45,11 +45,19 @@ struct PanelView: View {
 
             timerControls
 
-            Toggle("Keep Display Awake", isOn: Binding(
-                get: { session.keepDisplayAwake },
-                set: session.setKeepDisplayAwake
-            ))
-            .accessibilityLabel("Keep Display Awake")
+            toggleRow(
+                "Keep Display Awake",
+                help: "Also prevents the display from sleeping during an Awake Session.",
+                isOn: Binding(
+                    get: { session.keepDisplayAwake },
+                    set: { keepDisplayAwake in
+                        Task {
+                            await session.setKeepDisplayAwake(keepDisplayAwake)
+                        }
+                    }
+                )
+            )
+            .disabled(session.isStarting)
 
             if session.isBatteryMac {
                 batteryControls
@@ -82,8 +90,42 @@ struct PanelView: View {
 
     private var timerControls: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Timer")
-                .font(.subheadline.weight(.medium))
+            HStack {
+                Text("Timer")
+                    .font(.subheadline.weight(.medium))
+
+                Spacer()
+
+                if isPanelOpen,
+                   let deadline = session.timerDeadline,
+                   let duration = SessionTimer.duration(
+                       for: session.timerSelection,
+                       customHours: session.customTimerHours,
+                       customMinutes: session.customTimerMinutes
+                   ) {
+                    TimelineView(.periodic(
+                        from: deadline.addingTimeInterval(-duration),
+                        by: 1
+                    )) { context in
+                        if let countdown = session.countdown(at: context.date) {
+                            HStack(spacing: 5) {
+                                CountdownTimerIcon(progress: SessionTimer.progress(
+                                    deadline: deadline,
+                                    duration: duration,
+                                    now: context.date
+                                ))
+                                .accessibilityHidden(true)
+
+                                Text(countdown)
+                                    .font(.callout.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                            }
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel(countdown)
+                        }
+                    }
+                }
+            }
 
             TimerSegmentedControl(
                 selection: session.timerSelection,
@@ -120,30 +162,25 @@ struct PanelView: View {
                     .foregroundStyle(.secondary)
             }
             .textFieldStyle(.roundedBorder)
-
-            if isPanelOpen {
-                TimelineView(.periodic(from: .now, by: 60)) { context in
-                    if let countdown = session.countdown(at: context.date) {
-                        Text(countdown)
-                            .font(.callout.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                            .accessibilityLabel(countdown)
-                    }
-                }
-            }
         }
     }
 
     private var batteryControls: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Toggle("Only While Charging", isOn: Binding(
-                get: { session.onlyWhileCharging },
-                set: session.setOnlyWhileCharging
-            ))
-            .accessibilityLabel("Only While Charging")
+            toggleRow(
+                "Only While Charging",
+                help: "Requires external power and ends the Awake Session if power is disconnected.",
+                isOn: Binding(
+                    get: { session.onlyWhileCharging },
+                    set: session.setOnlyWhileCharging
+                )
+            )
 
             HStack {
-                Text("Battery Protection Threshold")
+                optionLabel(
+                    "Battery Protection Threshold",
+                    help: "Ends the Awake Session at or below this battery level while the Mac is discharging. Choose 5% to 80%."
+                )
                 Spacer()
                 TextField("Percent", text: Binding(
                     get: { batteryThresholdDraft.text },
@@ -156,6 +193,28 @@ struct PanelView: View {
                 .accessibilityLabel("Battery Protection Threshold")
                 Text("%")
                     .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func toggleRow(
+        _ title: String,
+        help: String? = nil,
+        isOn: Binding<Bool>
+    ) -> some View {
+        Toggle(isOn: isOn) {
+            optionLabel(title, help: help)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .accessibilityLabel(title)
+    }
+
+    @ViewBuilder
+    private func optionLabel(_ title: String, help: String?) -> some View {
+        HStack(spacing: 4) {
+            Text(title)
+            if let help {
+                OptionHelpButton(title: title, explanation: help)
             }
         }
     }
@@ -208,6 +267,48 @@ struct PanelView: View {
         case customHours
         case customMinutes
         case batteryThreshold
+    }
+}
+
+private struct CountdownTimerIcon: View {
+    let progress: Double
+
+    private var color: Color {
+        if progress <= 0.25 { return .yellow }
+        if progress <= 0.5 { return .mint }
+        return .green
+    }
+
+    var body: some View {
+        Image(systemName: "chart.pie.fill", variableValue: progress)
+            .foregroundStyle(color)
+            .frame(width: 16, height: 16)
+    }
+}
+
+private struct OptionHelpButton: View {
+    let title: String
+    let explanation: String
+
+    @State private var isPresented = false
+
+    var body: some View {
+        Button {
+            isPresented.toggle()
+        } label: {
+            Image(systemName: "questionmark.circle")
+                .imageScale(.small)
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .help(explanation)
+        .accessibilityLabel("Help for \(title)")
+        .accessibilityHint("Shows an explanation")
+        .popover(isPresented: $isPresented, arrowEdge: .trailing) {
+            Text(explanation)
+                .frame(width: 220, alignment: .leading)
+                .padding(12)
+        }
     }
 }
 

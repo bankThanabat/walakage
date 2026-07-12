@@ -14,75 +14,76 @@ struct AwakeSessionPowerTests {
         #expect(!session.onlyWhileCharging)
     }
 
-    @Test func desktopMacIgnoresOnlyWhileCharging() {
+    @Test func desktopMacIgnoresOnlyWhileCharging() async {
         let preventer = FakeLidSleepPreventer()
         let monitor = FakePowerMonitor(.init(isBatteryMac: false, supply: .unknown, batteryPercentage: nil))
         let session = AwakeSessionController(preventer: preventer, powerMonitor: monitor)
 
         session.setOnlyWhileCharging(true)
-        session.setKeepAwake(true)
+        await session.startKeepingAwake()
 
         #expect(!session.isBatteryMac)
         #expect(session.isAwake)
         #expect(preventer.startCount == 1)
     }
 
-    @Test func powerDisconnectedWinsOverLowBatteryBeforeStart() {
+    @Test func powerDisconnectedWinsOverLowBatteryBeforeStart() async {
         let preventer = FakeLidSleepPreventer()
         let monitor = FakePowerMonitor(.init(isBatteryMac: true, supply: .battery, batteryPercentage: 5))
         let session = AwakeSessionController(preventer: preventer, powerMonitor: monitor)
         session.setOnlyWhileCharging(true)
 
-        session.setKeepAwake(true)
+        await session.startKeepingAwake()
 
         #expect(!session.isAwake)
         #expect(preventer.startCount == 0)
         #expect(session.message == "Power disconnected.")
     }
 
-    @Test func lowBatteryBlocksBeforeStartingPrevention() {
+    @Test func lowBatteryBlocksBeforeStartingPrevention() async {
         let preventer = FakeLidSleepPreventer()
         let monitor = FakePowerMonitor(.init(isBatteryMac: true, supply: .battery, batteryPercentage: 20))
         let session = AwakeSessionController(preventer: preventer, powerMonitor: monitor)
 
-        session.setKeepAwake(true)
+        await session.startKeepingAwake()
 
         #expect(!session.isAwake)
         #expect(preventer.startCount == 0)
         #expect(session.message == "Battery low.")
     }
 
-    @Test func lowPercentageDoesNotBlockWhileOnExternalPower() {
+    @Test func lowPercentageDoesNotBlockWhileOnExternalPower() async {
         let preventer = FakeLidSleepPreventer()
         let monitor = FakePowerMonitor(.init(isBatteryMac: true, supply: .external, batteryPercentage: 5))
         let session = AwakeSessionController(preventer: preventer, powerMonitor: monitor)
 
-        session.setKeepAwake(true)
+        await session.startKeepingAwake()
 
         #expect(session.isAwake)
         #expect(preventer.startCount == 1)
     }
 
-    @Test func powerChangeProtectivelyStopsAnActiveSession() {
+    @Test func powerChangeProtectivelyStopsAnActiveSession() async {
         let preventer = FakeLidSleepPreventer()
         let monitor = FakePowerMonitor(.init(isBatteryMac: true, supply: .external, batteryPercentage: 80))
         let session = AwakeSessionController(preventer: preventer, powerMonitor: monitor)
         session.setOnlyWhileCharging(true)
-        session.setKeepAwake(true)
+        await session.startKeepingAwake()
 
         monitor.state = .init(isBatteryMac: true, supply: .battery, batteryPercentage: 80)
         monitor.sendChange()
+        await session.waitForPendingPrevention()
 
         #expect(!session.isAwake)
         #expect(preventer.stopCount == 1)
         #expect(session.message == "Power disconnected.")
     }
 
-    @Test func clearingBlockerClearsMessageWithoutRestarting() {
+    @Test func clearingBlockerClearsMessageWithoutRestarting() async {
         let preventer = FakeLidSleepPreventer()
         let monitor = FakePowerMonitor(.init(isBatteryMac: true, supply: .battery, batteryPercentage: 10))
         let session = AwakeSessionController(preventer: preventer, powerMonitor: monitor)
-        session.setKeepAwake(true)
+        await session.startKeepingAwake()
         #expect(session.message == "Battery low.")
 
         monitor.state = .init(isBatteryMac: true, supply: .external, batteryPercentage: 10)
@@ -93,15 +94,16 @@ struct AwakeSessionPowerTests {
         #expect(preventer.startCount == 0)
     }
 
-    @Test func thresholdClampsAndImmediatelyProtectsAnActiveSession() {
+    @Test func thresholdClampsAndImmediatelyProtectsAnActiveSession() async {
         let preventer = FakeLidSleepPreventer()
         let monitor = FakePowerMonitor(.init(isBatteryMac: true, supply: .battery, batteryPercentage: 70))
         let session = AwakeSessionController(preventer: preventer, powerMonitor: monitor)
         session.setBatteryProtectionThreshold(5)
-        session.setKeepAwake(true)
+        await session.startKeepingAwake()
 
         #expect(session.setBatteryProtectionThreshold(0) == 5)
         #expect(session.setBatteryProtectionThreshold(100) == 80)
+        await session.waitForPendingPrevention()
 
         #expect(session.batteryProtectionThreshold == 80)
         #expect(!session.isAwake)

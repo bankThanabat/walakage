@@ -80,4 +80,9 @@ enum SessionTimer {
 
         return String(format: "%dh %02dm left", totalMinutes / 60, totalMinutes % 60)
     }
+
+    static func progress(deadline: Date, duration: TimeInterval, now: Date) -> Double {
+        guard duration > 0 else { return 0 }
+        return min(1, max(0, deadline.timeIntervalSince(now) / duration))
+    }
 }

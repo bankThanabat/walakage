@@ -3,7 +3,7 @@ import Foundation
 import IOKit.pwr_mgt
 import Security
 
-enum LidSleepPreventionError: Error {
+enum LidSleepPreventionError: Error, Sendable {
     case commandFailed(String)
 
     var userMessage: String {
@@ -19,9 +19,53 @@ enum LidSleepPreventionError: Error {
     }
 }
 
-protocol LidSleepPreventing: AnyObject {
-    func startPreventingLidSleep(keepingDisplayAwake: Bool) throws
-    func stopPreventingLidSleep() throws
+protocol LidSleepPreventing: AnyObject, Sendable {
+    nonisolated func startPreventingLidSleep(keepingDisplayAwake: Bool) throws
+    nonisolated func stopPreventingLidSleep() throws
+}
+
+actor LidSleepPreventionWorker {
+    private let preventer: LidSleepPreventing
+
+    init(preventer: LidSleepPreventing) {
+        self.preventer = preventer
+    }
+
+    func start(keepingDisplayAwake: Bool) -> Result<Void, LidSleepPreventionError> {
+        do {
+            try preventer.startPreventingLidSleep(keepingDisplayAwake: keepingDisplayAwake)
+            return .success(())
+        } catch {
+            return .failure(Self.normalize(error))
+        }
+    }
+
+    func restart(keepingDisplayAwake: Bool) -> RestartResult {
+        let restoreError = stop()
+        return RestartResult(
+            restoreError: restoreError,
+            startResult: start(keepingDisplayAwake: keepingDisplayAwake)
+        )
+    }
+
+    func stop() -> LidSleepPreventionError? {
+        do {
+            try preventer.stopPreventingLidSleep()
+            return nil
+        } catch {
+            return Self.normalize(error)
+        }
+    }
+
+    private nonisolated static func normalize(_ error: Error) -> LidSleepPreventionError {
+        error as? LidSleepPreventionError
+            ?? .commandFailed(String(describing: error))
+    }
+
+    struct RestartResult: Sendable {
+        let restoreError: LidSleepPreventionError?
+        let startResult: Result<Void, LidSleepPreventionError>
+    }
 }
 
 // ponytail: Swift marks this unavailable; use the C symbol for the prototype,
@@ -35,7 +79,7 @@ private nonisolated func AuthorizationExecuteWithPrivilegesShim(
     _ communicationsPipe: UnsafeMutablePointer<UnsafeMutablePointer<FILE>?>?
 ) -> OSStatus
 
-final class PmsetLidSleepPreventer: LidSleepPreventing {
+nonisolated final class PmsetLidSleepPreventer: LidSleepPreventing, @unchecked Sendable {
     private nonisolated static let toolPath = "/usr/bin/pmset"
 
     private let runPmsetOverride: ((String) throws -> Void)?

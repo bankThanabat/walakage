@@ -32,4 +32,15 @@ struct SessionTimerTests {
         #expect(SessionTimer.countdown(deadline: now.addingTimeInterval(3_901), now: now) == "1h 06m left")
         #expect(SessionTimer.countdown(deadline: now, now: now) == nil)
     }
+
+    @Test func progressMatchesTheRemainingFractionAndClampsAtTheEnds() {
+        let now = Date(timeIntervalSince1970: 1_000)
+        let deadline = now.addingTimeInterval(60)
+
+        #expect(SessionTimer.progress(deadline: deadline, duration: 60, now: now) == 1)
+        #expect(SessionTimer.progress(deadline: deadline, duration: 60, now: now.addingTimeInterval(30)) == 0.5)
+        #expect(SessionTimer.progress(deadline: deadline, duration: 60, now: now.addingTimeInterval(90)) == 0)
+        #expect(SessionTimer.progress(deadline: deadline, duration: 60, now: now.addingTimeInterval(-30)) == 1)
+        #expect(SessionTimer.progress(deadline: deadline, duration: 0, now: now) == 0)
+    }
 }

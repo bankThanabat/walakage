@@ -4,7 +4,7 @@ import Testing
 
 @MainActor
 struct AwakeSessionTimerTests {
-    @Test func changingQuickTimerWhileActiveRestartsFromNow() {
+    @Test func changingQuickTimerWhileActiveRestartsFromNow() async {
         let clock = TestClock()
         let scheduler = TestDeadlineScheduler()
         let session = AwakeSessionController(
@@ -12,7 +12,7 @@ struct AwakeSessionTimerTests {
             now: { clock.now },
             scheduleDeadline: scheduler.schedule
         )
-        session.setKeepAwake(true)
+        await session.startKeepingAwake()
 
         session.setTimer(.fifteenMinutes)
         #expect(session.timerDeadline == clock.now.addingTimeInterval(900))
@@ -25,7 +25,7 @@ struct AwakeSessionTimerTests {
         #expect(session.timerDeadline == clock.now.addingTimeInterval(3_600))
     }
 
-    @Test func customTimerClampsAndRestartsAnActiveSession() {
+    @Test func customTimerClampsAndRestartsAnActiveSession() async {
         let clock = TestClock()
         let scheduler = TestDeadlineScheduler()
         let session = AwakeSessionController(
@@ -33,7 +33,7 @@ struct AwakeSessionTimerTests {
             now: { clock.now },
             scheduleDeadline: scheduler.schedule
         )
-        session.setKeepAwake(true)
+        await session.startKeepingAwake()
 
         let committed = session.setCustomTimer(hours: 24, minutes: 30)
 
@@ -44,14 +44,14 @@ struct AwakeSessionTimerTests {
         #expect(session.timerDeadline == clock.now.addingTimeInterval(24 * 60 * 60))
     }
 
-    @Test func zeroCustomTimerTurnsTimerOffWithoutStoppingKeepAwake() {
+    @Test func zeroCustomTimerTurnsTimerOffWithoutStoppingKeepAwake() async {
         let scheduler = TestDeadlineScheduler()
         let session = AwakeSessionController(
             preventer: FakeLidSleepPreventer(),
             scheduleDeadline: scheduler.schedule
         )
         session.setTimer(.fifteenMinutes)
-        session.setKeepAwake(true)
+        await session.startKeepingAwake()
 
         session.setCustomTimer(hours: 0, minutes: 0)
 
@@ -61,7 +61,7 @@ struct AwakeSessionTimerTests {
         #expect(scheduler.cancelCount == 1)
     }
 
-    @Test func deadlineStopsKeepAwakeAtTheExactWallClockTime() {
+    @Test func deadlineStopsKeepAwakeAtTheExactWallClockTime() async {
         let preventer = FakeLidSleepPreventer()
         let clock = TestClock()
         let scheduler = TestDeadlineScheduler()
@@ -71,18 +71,19 @@ struct AwakeSessionTimerTests {
             scheduleDeadline: scheduler.schedule
         )
         session.setTimer(.fifteenMinutes)
-        session.setKeepAwake(true)
+        await session.startKeepingAwake()
         let deadline = session.timerDeadline!
 
         clock.now = deadline
         scheduler.fireLatest()
+        await session.waitForPendingPrevention()
 
         #expect(!session.isAwake)
         #expect(preventer.stopCount == 1)
         #expect(session.message == "Time up.")
     }
 
-    @Test func countdownExistsOnlyForAnActiveTimedSession() {
+    @Test func countdownExistsOnlyForAnActiveTimedSession() async {
         let clock = TestClock()
         let session = AwakeSessionController(
             preventer: FakeLidSleepPreventer(),
@@ -93,7 +94,7 @@ struct AwakeSessionTimerTests {
 
         #expect(session.countdown(at: clock.now) == nil)
 
-        session.setKeepAwake(true)
+        await session.startKeepingAwake()
 
         #expect(session.countdown(at: clock.now.addingTimeInterval(1)) == "15m left")
     }

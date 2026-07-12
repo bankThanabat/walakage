@@ -4,7 +4,7 @@ import Testing
 
 @MainActor
 struct SessionDefaultsTests {
-    @Test func timerAndBatterySettingsAreRestoredWithoutResumingKeepAwake() {
+    @Test func timerAndBatterySettingsAreRestoredWithoutResumingKeepAwake() async {
         let defaults = isolatedDefaults()
         let power = FakePowerMonitor(.init(isBatteryMac: true, supply: .external, batteryPercentage: 90))
         let first = AwakeSessionController(
@@ -15,7 +15,7 @@ struct SessionDefaultsTests {
         first.setCustomTimer(hours: 2, minutes: 15)
         first.setBatteryProtectionThreshold(35)
         first.setOnlyWhileCharging(true)
-        first.setKeepAwake(true)
+        await first.startKeepingAwake()
 
         let restored = AwakeSessionController(
             preventer: FakeLidSleepPreventer(),
@@ -32,13 +32,13 @@ struct SessionDefaultsTests {
         #expect(restored.timerDeadline == nil)
     }
 
-    @Test func keepDisplayAwakeStillStartsOffOnEveryLaunch() {
+    @Test func keepDisplayAwakeStillStartsOffOnEveryLaunch() async {
         let defaults = isolatedDefaults()
         let first = AwakeSessionController(
             preventer: FakeLidSleepPreventer(),
             userDefaults: defaults
         )
-        first.setKeepDisplayAwake(true)
+        await first.setKeepDisplayAwake(true)
 
         let restored = AwakeSessionController(
             preventer: FakeLidSleepPreventer(),

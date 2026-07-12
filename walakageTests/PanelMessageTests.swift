@@ -13,11 +13,11 @@ struct PanelMessageTests {
         ])
     }
 
-    @Test func changingASettingClearsAnOldFailure() {
+    @Test func changingASettingClearsAnOldFailure() async {
         let preventer = FakeLidSleepPreventer()
         preventer.shouldFailStart = true
         let session = AwakeSessionController(preventer: preventer)
-        session.setKeepAwake(true)
+        await session.startKeepingAwake()
         #expect(session.message == "Unable to keep awake.")
 
         session.setTimer(.thirtyMinutes)
@@ -25,7 +25,7 @@ struct PanelMessageTests {
         #expect(session.message == nil)
     }
 
-    @Test func failurePersistsAcrossBackgroundPowerRefreshes() {
+    @Test func failurePersistsAcrossBackgroundPowerRefreshes() async {
         let preventer = FakeLidSleepPreventer()
         preventer.shouldFailStart = true
         let power = FakePowerMonitor(.init(
@@ -34,7 +34,7 @@ struct PanelMessageTests {
             batteryPercentage: 80
         ))
         let session = AwakeSessionController(preventer: preventer, powerMonitor: power)
-        session.setKeepAwake(true)
+        await session.startKeepingAwake()
 
         power.sendChange()
 

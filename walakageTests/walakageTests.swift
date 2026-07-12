@@ -1,15 +1,16 @@
 import IOKit.pwr_mgt
 import Security
 import Testing
+import Dispatch
 @testable import walakage
 
 @MainActor
 struct AwakeSessionControllerTests {
-    @Test func firstKeepAwakeOnStartsLidSleepPrevention() throws {
+    @Test func firstKeepAwakeOnStartsLidSleepPrevention() async {
         let preventer = FakeLidSleepPreventer()
         let session = makeSession(preventer: preventer)
 
-        session.setKeepAwake(true)
+        await session.startKeepingAwake()
 
         #expect(session.isAwake)
         #expect(session.message == nil)
@@ -18,12 +19,13 @@ struct AwakeSessionControllerTests {
         #expect(preventer.keepDisplayAwakeRequests == [false])
     }
 
-    @Test func keepAwakeOffRestoresLidSleep() throws {
+    @Test func keepAwakeOffRestoresLidSleep() async {
         let preventer = FakeLidSleepPreventer()
         let session = makeSession(preventer: preventer)
 
-        session.setKeepAwake(true)
-        session.setKeepAwake(false)
+        await session.startKeepingAwake()
+        session.stopKeepingAwake()
+        await session.waitForPendingPrevention()
 
         #expect(!session.isAwake)
         #expect(session.message == nil)
@@ -31,23 +33,23 @@ struct AwakeSessionControllerTests {
         #expect(preventer.stopCount == 1)
     }
 
-    @Test func quitRestoresLidSleep() throws {
+    @Test func quitRestoresLidSleep() async {
         let preventer = FakeLidSleepPreventer()
         let session = makeSession(preventer: preventer)
 
-        session.setKeepAwake(true)
-        session.quit()
+        await session.startKeepingAwake()
+        await session.quit()
 
         #expect(!session.isAwake)
         #expect(preventer.stopCount == 1)
     }
 
-    @Test func failedStartLeavesKeepAwakeOff() throws {
+    @Test func failedStartLeavesKeepAwakeOff() async {
         let preventer = FakeLidSleepPreventer()
         preventer.shouldFailStart = true
         let session = makeSession(preventer: preventer)
 
-        session.setKeepAwake(true)
+        await session.startKeepingAwake()
 
         #expect(!session.isAwake)
         #expect(session.message == "Unable to keep awake.")
@@ -55,46 +57,46 @@ struct AwakeSessionControllerTests {
         #expect(preventer.stopCount == 0)
     }
 
-    @Test func failedAdminApprovalShowsSpecificMessage() throws {
+    @Test func failedAdminApprovalShowsSpecificMessage() async {
         let preventer = FakeLidSleepPreventer()
         preventer.startError = LidSleepPreventionError.commandFailed("administrator user name or password was incorrect. (-60005)")
         let session = makeSession(preventer: preventer)
 
-        session.setKeepAwake(true)
+        await session.startKeepingAwake()
 
         #expect(!session.isAwake)
         #expect(session.message == "Administrator approval failed.")
     }
 
-    @Test func displayStartFailureLeavesKeepAwakeOffAndShowsMessage() throws {
+    @Test func displayStartFailureLeavesKeepAwakeOffAndShowsMessage() async {
         let preventer = FakeLidSleepPreventer()
         preventer.startError = LidSleepPreventionError.commandFailed("display failed")
         let session = makeSession(preventer: preventer)
 
-        session.setKeepDisplayAwake(true)
-        session.setKeepAwake(true)
+        await session.setKeepDisplayAwake(true)
+        await session.startKeepingAwake()
 
         #expect(!session.isAwake)
         #expect(session.message == "Unable to keep awake.")
         #expect(preventer.keepDisplayAwakeRequests == [true])
     }
 
-    @Test func keepDisplayAwakeOnStartsDisplayPrevention() throws {
+    @Test func keepDisplayAwakeOnStartsDisplayPrevention() async {
         let preventer = FakeLidSleepPreventer()
         let session = makeSession(preventer: preventer)
 
-        session.setKeepDisplayAwake(true)
-        session.setKeepAwake(true)
+        await session.setKeepDisplayAwake(true)
+        await session.startKeepingAwake()
 
         #expect(preventer.keepDisplayAwakeRequests == [true])
     }
 
-    @Test func changingKeepDisplayAwakeWhileActiveRecreatesPrevention() throws {
+    @Test func changingKeepDisplayAwakeWhileActiveRecreatesPrevention() async {
         let preventer = FakeLidSleepPreventer()
         let session = makeSession(preventer: preventer)
 
-        session.setKeepAwake(true)
-        session.setKeepDisplayAwake(true)
+        await session.startKeepingAwake()
+        await session.setKeepDisplayAwake(true)
 
         #expect(session.isAwake)
         #expect(preventer.keepDisplayAwakeRequests == [false, true])
@@ -105,6 +107,50 @@ struct AwakeSessionControllerTests {
         let session = makeSession(preventer: FakeLidSleepPreventer())
 
         #expect(!session.keepDisplayAwake)
+    }
+
+    @Test func authorizationDoesNotBlockTheMainActor() async {
+        let releaseStart = DispatchSemaphore(value: 0)
+        let preventer = FakeLidSleepPreventer()
+        preventer.onStart = { releaseStart.wait() }
+        let session = makeSession(preventer: preventer)
+        let clock = ContinuousClock()
+        let responsivenessDeadline = clock.now.advanced(by: .milliseconds(250))
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
+            releaseStart.signal()
+        }
+
+        let start = Task { await session.startKeepingAwake() }
+        while !session.isStarting, clock.now < responsivenessDeadline {
+            await Task.yield()
+        }
+
+        #expect(session.isStarting)
+        #expect(clock.now < responsivenessDeadline)
+        releaseStart.signal()
+        await start.value
+        #expect(session.isAwake)
+    }
+
+    @Test func stopWinsOverAnInFlightStart() async {
+        let releaseStart = DispatchSemaphore(value: 0)
+        let preventer = FakeLidSleepPreventer()
+        preventer.onStart = { releaseStart.wait() }
+        let session = makeSession(preventer: preventer)
+
+        let start = Task { await session.startKeepingAwake() }
+        while !session.isStarting {
+            await Task.yield()
+        }
+
+        session.stopKeepingAwake()
+        releaseStart.signal()
+        await start.value
+        await session.waitForPendingPrevention()
+
+        #expect(!session.isAwake)
+        #expect(preventer.startCount == 1)
+        #expect(preventer.stopCount == 1)
     }
 }
 
@@ -181,16 +227,18 @@ struct PmsetLidSleepPreventerTests {
     }
 }
 
-final class FakeLidSleepPreventer: LidSleepPreventing {
+final class FakeLidSleepPreventer: LidSleepPreventing, @unchecked Sendable {
     var startCount = 0
     var stopCount = 0
     var keepDisplayAwakeRequests: [Bool] = []
     var shouldFailStart = false
     var startError: Error?
+    var onStart: (() -> Void)?
 
     func startPreventingLidSleep(keepingDisplayAwake: Bool) throws {
         startCount += 1
         keepDisplayAwakeRequests.append(keepingDisplayAwake)
+        onStart?()
         if let startError {
             throw startError
         }

@@ -10,8 +10,10 @@ struct WalakageApp: App {
     var body: some Scene {
         MenuBarExtra {
             PanelView(session: session, setKeepAwake: setKeepAwake) {
-                session.quit()
-                NSApp.terminate(nil)
+                Task {
+                    await session.quit()
+                    NSApp.terminate(nil)
+                }
             }
         } label: {
             Image("StatusIcon")
@@ -24,20 +26,24 @@ struct WalakageApp: App {
 
     private func setKeepAwake(_ keepAwake: Bool) {
         guard keepAwake else {
-            session.setKeepAwake(false)
+            session.stopKeepingAwake()
             return
         }
 
         guard !session.isStartBlocked else {
-            session.setKeepAwake(true)
+            Task {
+                await session.startKeepingAwake()
+            }
             return
         }
 
         guard didConfirmLidSleepApproval || confirmLidSleepApproval() else { return }
 
-        session.setKeepAwake(true)
-        if session.isAwake {
-            didConfirmLidSleepApproval = true
+        Task {
+            await session.startKeepingAwake()
+            if session.isAwake {
+                didConfirmLidSleepApproval = true
+            }
         }
     }
 
